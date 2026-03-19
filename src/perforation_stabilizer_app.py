@@ -130,7 +130,7 @@ def detect_perforation(frame, roi_ratio=0.22, threshold=210):
     return _best_contour(adaptive, roi_w)
 
 
-def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None, roi_ratio=0.22, threshold=210, smooth_radius=9):
+def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None, roi_ratio=0.22, threshold=210, smooth_radius=9, jpeg_quality=95):
     files = list_images(input_dir)
     if not files:
         raise RuntimeError("No encontré imágenes dentro de la carpeta.")
@@ -216,8 +216,14 @@ def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None, roi_r
             if out_h is None:
                 out_h, out_w = stabilized.shape[:2]
 
-            out_path = os.path.join(output_dir, os.path.basename(f))
-            cv2.imwrite(out_path, stabilized)
+            basename = os.path.basename(f)
+            if jpeg_quality == 0:
+                basename = os.path.splitext(basename)[0] + ".png"
+                out_path = os.path.join(output_dir, basename)
+                cv2.imwrite(out_path, stabilized)
+            else:
+                out_path = os.path.join(output_dir, basename)
+                cv2.imwrite(out_path, stabilized, [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)])
         if progress_cb:
             progress_cb((total + i) / (total * 2))
 
@@ -232,6 +238,7 @@ def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None, roi_r
         "applied_crop_right": crop_right,
         "applied_crop_top": crop_top,
         "applied_crop_bottom": crop_bottom,
+        "output_format": "png (lossless)" if jpeg_quality == 0 else f"jpeg q{jpeg_quality}",
     }
 
     with open(os.path.join(output_dir, "stabilization_report.txt"), "w", encoding="utf-8") as f:
@@ -317,6 +324,7 @@ class AppBase:
                     roi_ratio=float(self.roi_var.get()),
                     threshold=int(self.threshold_var.get()),
                     smooth_radius=int(self.smooth_var.get()),
+                    jpeg_quality=int(self.quality_var.get()),
                 )
                 self.root.after(0, lambda: self._finish(summary, output_dir))
             except Exception as e:
@@ -341,6 +349,7 @@ class DragDropApp(AppBase):
         self.roi_var = tk.StringVar(value="0.22")
         self.threshold_var = tk.StringVar(value="210")
         self.smooth_var = tk.StringVar(value="9")
+        self.quality_var = tk.StringVar(value="95")
 
         tk.Label(self.root, text="Arrastra aquí la carpeta de frames", font=("Arial", 16, "bold")).pack(anchor="w")
         drop = tk.Label(self.root, text="⬇️ Suelta aquí la carpeta ⬇️", relief="groove", bd=2, height=5, bg="#f6f6f6")
@@ -368,6 +377,8 @@ class DragDropApp(AppBase):
         tk.Entry(opts, textvariable=self.threshold_var, width=8).grid(row=0, column=3, padx=(6, 16))
         tk.Label(opts, text="Suavizado").grid(row=0, column=4, sticky="w")
         tk.Entry(opts, textvariable=self.smooth_var, width=8).grid(row=0, column=5, padx=(6, 16))
+        tk.Label(opts, text="Calidad JPEG (0=PNG)").grid(row=0, column=6, sticky="w", padx=(16, 0))
+        tk.Entry(opts, textvariable=self.quality_var, width=6).grid(row=0, column=7, padx=(6, 0))
 
         self.run_btn = tk.Button(self.root, text="Estabilizar secuencia", font=("Arial", 13, "bold"), command=self.run_process)
         self.run_btn.pack(fill="x", pady=(4, 10))
@@ -402,6 +413,7 @@ class PickerApp(AppBase):
         self.roi_var = tk.StringVar(value="0.22")
         self.threshold_var = tk.StringVar(value="210")
         self.smooth_var = tk.StringVar(value="9")
+        self.quality_var = tk.StringVar(value="95")
 
         tk.Label(self.root, text="Perforation Stabilizer", font=("Arial", 16, "bold")).pack(anchor="w")
         tk.Label(self.root, text="Elige la carpeta de frames y el programa fijará la perforación en toda la secuencia.").pack(anchor="w", pady=(4, 12))
@@ -426,6 +438,8 @@ class PickerApp(AppBase):
         tk.Entry(opts, textvariable=self.threshold_var, width=8).grid(row=0, column=3, padx=(6, 16))
         tk.Label(opts, text="Suavizado").grid(row=0, column=4, sticky="w")
         tk.Entry(opts, textvariable=self.smooth_var, width=8).grid(row=0, column=5, padx=(6, 16))
+        tk.Label(opts, text="Calidad JPEG (0=PNG)").grid(row=0, column=6, sticky="w", padx=(16, 0))
+        tk.Entry(opts, textvariable=self.quality_var, width=6).grid(row=0, column=7, padx=(6, 0))
 
         self.run_btn = tk.Button(self.root, text="Estabilizar secuencia", font=("Arial", 13, "bold"), command=self.run_process)
         self.run_btn.pack(fill="x", pady=(4, 10))
