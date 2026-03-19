@@ -68,6 +68,39 @@ def moving_average(points, radius=9):
     return list(zip(xs_s.tolist(), ys_s.tolist()))
 
 
+def _best_contour(thresh, roi_w):
+    """Return (cx, cy) of the best perforation candidate in a binary image, or None."""
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    best_score = -1
+    best_cnt = None
+    best_box = None
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < 5000:
+            continue
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        aspect = bw / float(bh + 1e-6)
+        if not (0.40 <= aspect <= 1.20):
+            continue
+        fill_ratio = area / float((bw * bh) + 1e-6)
+        if fill_ratio < 0.75:
+            continue
+        if x > roi_w * 0.70:
+            continue
+        score = area + (fill_ratio * 1000.0)
+        if score > best_score:
+            best_score = score
+            best_cnt = cnt
+            best_box = (x, y, bw, bh)
+    if best_cnt is None:
+        return None
+    x, y, bw, bh = best_box
+    M = cv2.moments(best_cnt)
+    cx = M["m10"] / M["m00"] if M["m00"] != 0 else x + bw / 2.0
+    cy = M["m01"] / M["m00"] if M["m00"] != 0 else y + bh / 2.0
+    return (float(cx), float(cy))
+
+
 def detect_perforation(frame, roi_ratio=0.22, threshold=210):
     h, w = frame.shape[:2]
     roi_w = max(50, int(w * roi_ratio))
@@ -75,54 +108,26 @@ def detect_perforation(frame, roi_ratio=0.22, threshold=210):
 
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, thresh = cv2.threshold(blur, threshold, 255, cv2.THRESH_BINARY)
 
     kernel = np.ones((3, 3), np.uint8)
+
+    # Primary: global threshold
+    _, thresh = cv2.threshold(blur, threshold, 255, cv2.THRESH_BINARY)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    result = _best_contour(thresh, roi_w)
+    if result is not None:
+        return result
 
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    best_score = -1
-    best_cnt = None
-    best_box = None
-
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < 5000:
-            continue
-
-        x, y, bw, bh = cv2.boundingRect(cnt)
-        aspect = bw / float(bh + 1e-6)
-        if not (0.40 <= aspect <= 1.20):
-            continue
-
-        fill_ratio = area / float((bw * bh) + 1e-6)
-        if fill_ratio < 0.75:
-            continue
-
-        if x > roi_w * 0.70:
-            continue
-
-        score = area + (fill_ratio * 1000.0)
-        if score > best_score:
-            best_score = score
-            best_cnt = cnt
-            best_box = (x, y, bw, bh)
-
-    if best_cnt is None:
-        return None
-
-    x, y, bw, bh = best_box
-    M = cv2.moments(best_cnt)
-    if M["m00"] != 0:
-        cx = M["m10"] / M["m00"]
-        cy = M["m01"] / M["m00"]
-    else:
-        cx = x + bw / 2.0
-        cy = y + bh / 2.0
-
-    return (float(cx), float(cy))
+    # Fallback: adaptive threshold — handles overexposed frames where the
+    # global threshold saturates the entire ROI.
+    block = max(51, (min(h, roi_w) // 20) | 1)  # odd block size ~5% of ROI
+    adaptive = cv2.adaptiveThreshold(
+        blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block, -5
+    )
+    adaptive = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, kernel)
+    adaptive = cv2.morphologyEx(adaptive, cv2.MORPH_CLOSE, kernel)
+    return _best_contour(adaptive, roi_w)
 
 
 def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None, roi_ratio=0.22, threshold=210, smooth_radius=9):
@@ -167,28 +172,11 @@ def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None, roi_r
     target_y = float(np.median([p[1] for p in valid]))
     log(f"Punto fijo objetivo: x={target_x:.2f}, y={target_y:.2f}")
 
-    # Reject outliers: detections farther than 5×MAD from the median are treated as missed.
-    # 5× is intentionally generous — real scanner jitter can be large; we only want to
-    # discard clear false positives (e.g. bright spots on the film content detected instead
-    # of the perforation), which tend to be dramatically far from the median.
-    mad_x = float(np.median([abs(p[0] - target_x) for p in valid])) or 1.0
-    mad_y = float(np.median([abs(p[1] - target_y) for p in valid])) or 1.0
-    outlier_thresh_x = max(5.0 * mad_x, 80.0)
-    outlier_thresh_y = max(5.0 * mad_y, 80.0)
-    cleaned = [
-        p if (p is not None
-              and abs(p[0] - target_x) <= outlier_thresh_x
-              and abs(p[1] - target_y) <= outlier_thresh_y)
-        else None
-        for p in points
-    ]
-    n_outliers = sum(1 for o, p in zip(cleaned, points) if o is None and p is not None)
-    if n_outliers:
-        log(f"Outliers descartados: {n_outliers}")
-
-    # Fill None/outlier positions by linear interpolation (no smoothing — track real jitter)
-    xs = np.array([p[0] if p is not None else np.nan for p in cleaned], dtype=np.float32)
-    ys = np.array([p[1] if p is not None else np.nan for p in cleaned], dtype=np.float32)
+    # Fill None positions (failed detections) by linear interpolation.
+    # No global outlier filter: the shape filters in detect_perforation are
+    # already strict enough to ensure any returned point is the real perforation.
+    xs = np.array([p[0] if p is not None else np.nan for p in points], dtype=np.float32)
+    ys = np.array([p[1] if p is not None else np.nan for p in points], dtype=np.float32)
     idx = np.arange(len(xs))
     good_x = np.isfinite(xs); good_y = np.isfinite(ys)
     if np.any(good_x): xs[~good_x] = np.interp(idx[~good_x], idx[good_x], xs[good_x])
