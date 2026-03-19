@@ -1,0 +1,38 @@
+# Media files
+media/
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.bmp
+*.gif
+*.webp
+*.svg
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.mxf
+*.r3d
+*.dpx
+*.exr
+*.dng
+*.raw
+*.cr2
+*.nef
+
+# Output folders
+*_ESTABILIZADO/
+stabilization_report.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# macOS
+.DS_Store
