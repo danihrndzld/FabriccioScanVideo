@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command' | grep -q 'git commit' && nohup /Users/dani/Developer/analog-film-stabilizer/scripts/build-local.sh >> /tmp/perfstab-build.log 2>&1 & echo '{\"systemMessage\": \"🏗 Build iniciado en background — log: /tmp/perfstab-build.log\"}' || true",
+            "async": true,
+            "statusMessage": "Lanzando build local..."
+          }
+        ]
+      }
+    ]
+  }
+}
