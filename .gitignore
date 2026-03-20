@@ -45,3 +45,4 @@ dist/
 # Electron / Node
 electron/node_modules/
 dist/
+Perforation_Stabilizer_v*.zip

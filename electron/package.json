@@ -1,6 +1,6 @@
 {
   "name": "perforation-stabilizer",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "Film perforation stabilizer for analog scan sequences",
   "main": "main.js",
   "scripts": {
@@ -19,13 +19,23 @@
     },
     "mac": {
       "category": "public.app-category.video",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }]
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
     },
     "extraResources": [
       {
         "from": "../src",
         "to": "src",
-        "filter": ["*.py"]
+        "filter": [
+          "*.py"
+        ]
       }
     ]
   }
