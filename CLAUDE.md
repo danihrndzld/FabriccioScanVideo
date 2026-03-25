@@ -35,7 +35,7 @@ Pure processing module (no UI). Two processing passes:
 2. **Stabilization pass** — `stabilize_folder()` uses the **median** of raw per-frame positions as the fixed anchor, fills missed frames by linear interpolation, then translates each frame with `cv2.warpAffine`.
 
 Key parameters:
-- **`film_format`**: `'super8'` (1 perf, left ROI), `'8mm'` (2 perfs, right ROI, midpoint anchor), `'super16'` (1 perf, right ROI)
+- **`film_format`**: `'super8'` (1 perf, left ROI), `'8mm'` (2 perfs, left ROI, midpoint anchor), `'super16'` (2 perfs, left ROI, midpoint anchor) — all formats scan the left side
 - **`roi_ratio`**: fraction of frame width to search — default `0.22`
 - **`threshold`**: brightness cutoff for binarization — default `210`
 - **`smooth_radius`**: moving average window half-size — default `9`

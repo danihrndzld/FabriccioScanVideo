@@ -1,10 +1,11 @@
 'use strict';
 
-const { contextBridge, ipcRenderer, webUtils, app } = require('electron');
+const path = require('path');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  /** App version from package.json */
-  version: process.env.npm_package_version || require('../package.json').version,
+  /** App version from package.json — use __dirname so it resolves inside the asar in production */
+  version: require(path.join(__dirname, 'package.json')).version,
 
   /** Resolve a File object (from drag-drop) to its filesystem path */
   getPathForFile: (file) => webUtils.getPathForFile(file),

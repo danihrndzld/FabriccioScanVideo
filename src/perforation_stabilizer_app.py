@@ -79,22 +79,22 @@ def detect_perforation(frame, roi_ratio=0.22, threshold=210, film_format='super8
 
     film_format values:
       'super8'  — 1 perf, left ROI (default)
-      '8mm'     — 2 perfs per frame, right ROI; midpoint used as anchor
-      'super16' — 1 perf, right ROI
+      '8mm'     — 2 perfs per frame, left ROI; midpoint used as anchor
+      'super16' — 2 perfs per frame, left ROI; midpoint used as anchor
+    All formats scan the left side — perforations are always on the left.
     """
     h, w = frame.shape[:2]
     roi_w = max(50, int(w * roi_ratio))
 
-    roi_side = 'right' if film_format in ('8mm', 'super16') else 'left'
-    roi_x_offset = (w - roi_w) if roi_side == 'right' else 0
-    roi = frame[:, w - roi_w:] if roi_side == 'right' else frame[:, :roi_w]
+    roi_x_offset = 0
+    roi = frame[:, :roi_w]
 
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     kernel = np.ones((3, 3), np.uint8)
 
     def resolve(thresh_img):
-        top_n = 2 if film_format == '8mm' else 1
+        top_n = 2 if film_format in ('8mm', 'super16') else 1
         result = _best_contour(thresh_img, roi_w, top_n=top_n)
         if top_n == 1:
             if result is None:
