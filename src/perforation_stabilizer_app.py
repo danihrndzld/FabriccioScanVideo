@@ -85,48 +85,64 @@ def detect_perforation(frame, roi_ratio=0.22, threshold=210, film_format='super8
     """
     h, w = frame.shape[:2]
     roi_w = max(50, int(w * roi_ratio))
-
-    roi_x_offset = 0
-    roi = frame[:, :roi_w]
-
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
     kernel = np.ones((3, 3), np.uint8)
 
-    def resolve(thresh_img):
-        top_n = 2 if film_format in ('8mm', 'super16') else 1
-        result = _best_contour(thresh_img, roi_w, top_n=top_n)
-        if top_n == 1:
-            if result is None:
-                return None
-            cx, cy = result
-        else:
-            if not result:
-                return None
-            if len(result) == 2:
-                cx = (result[0][0] + result[1][0]) / 2.0
-                cy = (result[0][1] + result[1][1]) / 2.0
-            else:
-                cx, cy = result[0]
-        return (float(cx + roi_x_offset), float(cy))
+    def thresh_band(band_bgr):
+        """Otsu-threshold a band; fall back to adaptive if Otsu saturates it."""
+        gray = cv2.cvtColor(band_bgr, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, t = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        t = cv2.morphologyEx(t, cv2.MORPH_OPEN, kernel)
+        t = cv2.morphologyEx(t, cv2.MORPH_CLOSE, kernel)
+        if cv2.countNonZero(t) > 0:
+            return t
+        # Fallback: adaptive threshold for overexposed bands
+        bh, bw = band_bgr.shape[:2]
+        block = max(51, (min(bh, roi_w) // 20) | 1)
+        a = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, block, -5)
+        a = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
+        a = cv2.morphologyEx(a, cv2.MORPH_CLOSE, kernel)
+        return a
 
-    # Primary: global threshold
-    _, thresh = cv2.threshold(blur, threshold, 255, cv2.THRESH_BINARY)
+    roi = frame[:, :roi_w]
+
+    if film_format in ('8mm', 'super16'):
+        # Split into top and bottom halves so edge-coding artifacts between the
+        # two perforations cannot merge them into a single invalid contour.
+        mid = h // 2
+        pt_top = _best_contour(thresh_band(roi[:mid, :]),  roi_w, top_n=1)
+        pt_bot = _best_contour(thresh_band(roi[mid:, :]),  roi_w, top_n=1)
+
+        if pt_top and pt_bot:
+            # Average the two perf centroids; adjust bottom y back to full-frame coords
+            cx = (pt_top[0] + pt_bot[0]) / 2.0
+            cy = (pt_top[1] + (pt_bot[1] + mid)) / 2.0
+            return (float(cx), float(cy))
+        if pt_top:
+            return (float(pt_top[0]), float(pt_top[1]))
+        if pt_bot:
+            return (float(pt_bot[0]), float(pt_bot[1] + mid))
+        return None
+
+    # Super 8: single perforation — Otsu primary, adaptive fallback
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-    pt = resolve(thresh)
+    pt = _best_contour(thresh, roi_w, top_n=1)
     if pt is not None:
-        return pt
+        return (float(pt[0]), float(pt[1]))
 
-    # Fallback: adaptive threshold — handles overexposed frames where the
-    # global threshold saturates the entire ROI.
-    block = max(51, (min(h, roi_w) // 20) | 1)  # odd block size ~5% of ROI
+    block = max(51, (min(h, roi_w) // 20) | 1)
     adaptive = cv2.adaptiveThreshold(
         blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block, -5
     )
     adaptive = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, kernel)
     adaptive = cv2.morphologyEx(adaptive, cv2.MORPH_CLOSE, kernel)
-    return resolve(adaptive)
+    pt = _best_contour(adaptive, roi_w, top_n=1)
+    return (float(pt[0]), float(pt[1])) if pt else None
 
 
 def stabilize_folder(input_dir, output_dir, progress_cb=None, log_cb=None,
