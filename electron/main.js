@@ -117,23 +117,37 @@ ipcMain.handle('open-folder', async () => {
 ipcMain.handle('start-process', (event, opts) => {
   if (pyProcess) return; // already running
 
-  // In production the script lives in extraResources/src/
-  const scriptPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'src', 'stabilizer_cli.py')
-    : path.join(__dirname, '..', 'src', 'stabilizer_cli.py');
+  // In production use the bundled standalone binary (no Python required on user machine).
+  // In dev fall back to python3 + script.
+  let executable, args;
+  if (app.isPackaged) {
+    const binaryName = process.arch === 'arm64' ? 'stabilizer_arm64' : 'stabilizer_x64';
+    executable = path.join(process.resourcesPath, binaryName);
+    args = [
+      '--input',       opts.input,
+      '--output',      opts.output,
+      '--roi',         String(opts.roi),
+      '--threshold',   String(opts.threshold),
+      '--smooth',      String(opts.smooth),
+      '--quality',     String(opts.quality),
+      '--film-format', String(opts.filmFormat || 'super8'),
+    ];
+  } else {
+    const scriptPath = path.join(__dirname, '..', 'src', 'stabilizer_cli.py');
+    executable = 'python3';
+    args = [
+      scriptPath,
+      '--input',       opts.input,
+      '--output',      opts.output,
+      '--roi',         String(opts.roi),
+      '--threshold',   String(opts.threshold),
+      '--smooth',      String(opts.smooth),
+      '--quality',     String(opts.quality),
+      '--film-format', String(opts.filmFormat || 'super8'),
+    ];
+  }
 
-  const args = [
-    scriptPath,
-    '--input',       opts.input,
-    '--output',      opts.output,
-    '--roi',         String(opts.roi),
-    '--threshold',   String(opts.threshold),
-    '--smooth',      String(opts.smooth),
-    '--quality',     String(opts.quality),
-    '--film-format', String(opts.filmFormat || 'super8'),
-  ];
-
-  pyProcess = spawn('python3', args);
+  pyProcess = spawn(executable, args);
 
   // Parse JSON-lines from stdout
   let buffer = '';
