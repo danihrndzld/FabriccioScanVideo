@@ -97,6 +97,37 @@ html, body {
   letter-spacing: 0.05em;
 }
 
+.btn-check-update {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  transition: color 0.13s, border-color 0.13s;
+}
+
+.btn-check-update:hover {
+  color: var(--text-muted);
+  border-color: var(--border-focus);
+}
+
+.btn-check-update:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.btn-check-update:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ── Main scroll area ─────────────────────────────────────────────────────── */
 
 .app-main {

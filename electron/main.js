@@ -24,7 +24,7 @@ function isNewer(candidate, current) {
 }
 
 // ── Auto-update: poll GitHub releases API ────────────────────────────────────
-function checkForUpdates() {
+function checkForUpdates(manual = false) {
   const req = net.request({
     url:    `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
     method: 'GET',
@@ -40,7 +40,10 @@ function checkForUpdates() {
         const release   = JSON.parse(body);
         const latest    = (release.tag_name || '').replace(/^v/, '');
         const current   = app.getVersion();
-        if (!latest || !isNewer(latest, current)) return;
+        if (!latest || !isNewer(latest, current)) {
+          if (manual) mainWindow?.webContents.send('update-not-found');
+          return;
+        }
 
         // Pick the right DMG for this arch
         const isArm = process.arch === 'arm64';
@@ -97,6 +100,9 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
+
+// ── IPC: Manual update check ─────────────────────────────────────────────────
+ipcMain.handle('check-updates', () => checkForUpdates());
 
 // ── IPC: Open folder dialog ──────────────────────────────────────────────────
 ipcMain.handle('open-folder', async () => {

@@ -24,6 +24,29 @@ if (versionBadge && window.api.version) {
   versionBadge.setAttribute('aria-label', `Versión ${window.api.version}`);
 }
 
+// ── Check for update button ───────────────────────────────────────────────────
+const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+checkUpdateBtn.addEventListener('click', async () => {
+  checkUpdateBtn.disabled = true;
+  checkUpdateBtn.textContent = 'Buscando…';
+  await window.api.checkForUpdates();
+  // Timeout fallback in case the network call hangs
+  setTimeout(() => {
+    if (checkUpdateBtn.disabled) {
+      checkUpdateBtn.disabled = false;
+      checkUpdateBtn.textContent = 'Buscar actualización';
+    }
+  }, 8000);
+});
+
+window.api.onUpdateNotFound(() => {
+  checkUpdateBtn.disabled = false;
+  checkUpdateBtn.textContent = 'Al día ✓';
+  setTimeout(() => {
+    checkUpdateBtn.textContent = 'Buscar actualización';
+  }, 3000);
+});
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let isRunning = false;
 

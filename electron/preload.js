@@ -33,4 +33,6 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress',  (_e, p)    => cb(p)),
   downloadUpdate:           (opts) => ipcRenderer.invoke('download-update', opts),
   openExternal:             (url)  => ipcRenderer.invoke('open-external',   url),
+  checkForUpdates:          ()     => ipcRenderer.invoke('check-updates'),
+  onUpdateNotFound:         (cb)   => ipcRenderer.on('update-not-found', () => cb()),
 });
